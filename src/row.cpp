@@ -3,6 +3,8 @@
 #include <hyprland/src/managers/EventManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <algorithm>
+#include <cmath>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/managers/LayoutManager.hpp>
 #include <format>
@@ -17,6 +19,25 @@ extern Overview *overviews;
 extern std::function<SDispatchResult(std::string)> orig_moveFocusTo;
 extern ScrollerSizes scroller_sizes;
 
+namespace {
+// Normalize column widths around 2-column transitions
+inline void reset_both_column_widths_if_two(List<Column *> &columns, double maxw) {
+    if (columns.size() == 2) {
+        for (auto c = columns.first(); c != nullptr; c = c->next()) {
+            auto defw = scroller_sizes.get_column_default_width(c->data()->get_active_window());
+            c->data()->update_width(defw, maxw);
+        }
+    }
+}
+
+// Apply single-column width when a workspace holds exactly one column
+inline void apply_single_column_width_if_one(List<Column *> &columns, double maxw) {
+    if (columns.size() == 1) {
+        auto only = columns.first()->data();
+        only->update_width(scroller_sizes.get_single_column_width(), maxw);
+    }
+}
+} // namespace
 Row::Row(WORKSPACEID workspace)
     : workspace(workspace), overview(false),
       reorder(Reorder::Auto), pinned(nullptr), active(nullptr)
@@ -163,6 +184,8 @@ void Row::add_active_window(PHLWINDOW window)
             node = columns.emplace_before(columns.first(), new Column(window, this));
             break;
         }
+        // If we just transitioned from 1 -> 2 columns, reset both to default column widths
+        reset_both_column_widths_if_two(columns, max.w);
         if (focus == ModeModifier::FOCUS_FOCUS || store_active == nullptr)
             active = node;
         else {
@@ -219,6 +242,8 @@ bool Row::remove_window(PHLWINDOW window)
                 if (columns.empty()) {
                     return false;
                 } else {
+                    // If only one column remains, apply single-column width
+                    apply_single_column_width_if_one(columns, max.w);
                     recalculate_row_geometry();
                     break;
                 }
@@ -907,6 +932,9 @@ void Row::admit_window(AdmitExpelDirection dir)
         w->pin(true);
     active->data()->admit_window(w);
 
+    // If only one column remains after admitting, apply single-column width
+    apply_single_column_width_if_one(columns, max.w);
+
     reorder = Reorder::Auto;
     recalculate_row_geometry();
 
@@ -954,6 +982,8 @@ void Row::expel_window(AdmitExpelDirection dir)
         // This helps the heuristic in recalculate_row_geometry()
         active->data()->set_geom_pos(active->prev()->data()->get_geom_x() + active->prev()->data()->get_geom_w(), max.y);
     }
+    // If we just transitioned from 1 -> 2 columns, reset both to default column widths
+    reset_both_column_widths_if_two(columns, max.w);
 
     reorder = Reorder::Auto;
     recalculate_row_geometry();
