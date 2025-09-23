@@ -1,0 +1,21 @@
+pkgname=hyprland-plugin-spiral
+pkgver=0.51.0
+pkgrel=1
+pkgdesc="Spiral layout plugin for Hyprland"
+arch=('x86_64' 'aarch64')
+url="https://github.com/fecet/hyprspiral"
+license=('MIT')
+depends=("hyprland-spiral=${pkgver}")
+makedepends=('git' 'cmake' 'hyprland-spiral')
+source=("git+${url}")
+sha256sums=('SKIP')
+
+build() {
+	cd "$srcdir"/"hyprspiral"
+	make release PREFIX=/usr
+}
+
+package() {
+	install -Dm0755 "$srcdir/hyprspiral/hyprscroller.so" \
+		"$pkgdir/usr/lib/hyprspiral.so"
+}

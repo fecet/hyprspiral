@@ -1,0 +1,98 @@
+# Maintainer: Caleb Maclennan <caleb@alerque.com>
+# Contributor: ThatOneCalculator <kainoa@t1c.dev>
+# Contributor: Brenno Lemos <brenno@syndel.is>
+# Contributor: Gabriel Fox <inbox@gabrielfox.dev>
+
+pkgname=hyprland-spiral
+pkgver=0.51.0
+pkgrel=1
+pkgdesc='a highly customizable dynamic tiling Wayland compositor'
+arch=(x86_64 aarch64)
+url="https://github.com/lxe/Hyprland"
+license=(BSD-3-Clause)
+depends=(cairo # libcairo.so
+  aquamarine libaquamarine.so
+  gcc-libs # libgcc_s.so libstdc++.so
+  glibc    # libc.so libm.so
+  glib2 libgio-2.0.so libgobject-2.0.so
+  glslang
+  hyprcursor libhyprcursor.so
+  hyprgraphics libhyprgraphics.so
+  hyprland-qtutils
+  hyprlang libhyprlang.so
+  hyprutils libhyprutils.so
+  hyprwayland-scanner
+  libdisplay-info libdisplay-info.so
+  libdrm # libdrm.so
+  libglvnd libEGL.so libGLESv2.so libOpenGL.so
+  libinput # libinput.so
+  libliftoff libliftoff.so
+  libx11
+  libxcb        # libxcb-dri3.so libxcb-present.so libxcb-render.so libxcb-res.so libxcb-shm.so libxcb.so libxcb-xfixes.so libxcb-xinput.so
+  libxcomposite # libxcb-composite.so
+  libxcursor    # libXcursor.so
+  libxfixes
+  libxkbcommon libxkbcommon.so
+  libxrender
+  mesa # libgbm.so
+  opengl-driver
+  pango libpango-1.0.so libpangocairo-1.0.so
+  pixman libpixman-1.so
+  re2 libre2.so
+  seatd libseat.so
+  systemd-libs libsystemd.so
+  tomlplusplus libtomlplusplus.so libudev.so
+  util-linux-libs libuuid.so
+  wayland libwayland-client.so libwayland-server.so
+  wayland-protocols
+  xcb-proto
+  xcb-util
+  xcb-util-errors # libxcb-errors.so
+  xcb-util-image
+  xcb-util-keysyms
+  xcb-util-renderutil # libxcb-render-util.so
+  xcb-util-wm         # libxcb-ewmh.so  libxcb-icccm.so
+  xorg-xwayland)
+makedepends=(cmake
+  glaze
+  hyprland-protocols
+  meson
+  ninja
+  xorgproto)
+optdepends=('cmake: to build and install plugins using hyprpm'
+  'cpio: to build and install plugins using hyprpm'
+  'glaze: to build and install plugins using hyprpm'
+  'hyprland-protocols: to build and install plugins using hyprpm'
+  'meson: to build and install plugins using hyprpm'
+  'uwsm: the recommended way to start Hyprland')
+provides=(wayland-compositor "hyprland=${pkgver}")
+source=("git+$url"
+  "force_render.patch")
+sha256sums=('SKIP'
+  'SKIP')
+
+pkgver() {
+  cat "Hyprland/VERSION" | head -n1
+}
+
+prepare() {
+  cd Hyprland
+  git submodule update --init --recursive
+  # Apply force_render patch
+  patch -Np1 -i "$srcdir/force_render.patch"
+  # sed -i -e '/^release:/{n;s/-D/-DCMAKE_SKIP_RPATH=ON -D/}' Makefile
+  # Workaround for https://gitlab.archlinux.org/archlinux/packaging/packages/hyprland/-/issues/15
+  # rm -fv scripts/generateVersion.sh
+}
+
+build() {
+  cd Hyprland
+  make release PREFIX=/usr
+}
+
+package() {
+  cd Hyprland
+  make DESTDIR="$pkgdir" install
+  rm -fv "$pkgdir/usr/include/hyprland/src/version.h.in"
+  install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" LICENSE
+}

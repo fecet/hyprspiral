@@ -1,0 +1,20 @@
+pkgbase = wl-kbptr-hyprland
+	pkgdesc = Control the mouse pointer with the keyboard on Wayland
+	pkgver = r7.4b74e5f
+	pkgrel = 1
+	url = https://github.com/moverest/wl-kbptr
+	arch = x86_64
+	license = GPL-3.0
+	makedepends = meson
+	makedepends = wayland-protocols
+	makedepends = git
+	depends = cairo
+	depends = wayland
+	depends = libxkbcommon
+	depends = opencv
+	depends = pixman
+	conflicts = wl-kbptr
+	source = git+https://github.com/moverest/wl-kbptr.git#commit=e46bbc5cec87e622b007fdf2658b56d1541d048e
+	sha256sums = SKIP
+
+pkgname = wl-kbptr-hyprland
