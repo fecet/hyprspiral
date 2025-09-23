@@ -1,0 +1,61 @@
+
+# Maintainer: Caleb Maclennan <caleb@alerque.com>
+
+pkgname=xdg-desktop-portal-hyprland-input-capture
+pkgver=1.3.10
+pkgrel=1
+pkgdesc='xdg-desktop-portal backend for hyprland with input capture support (git version)'
+_srcname="xdg-desktop-portal-hyprland"
+url="https://github.com/3l0w/$_srcname"
+arch=(x86_64)
+license=(MIT)
+provides=(xdg-desktop-portal-impl xdg-desktop-portal-hyprland)
+conflicts=(xdg-desktop-portal-hyprland)
+depends=(gcc-libs
+         glibc
+         hyprlang libhyprlang.so
+         hyprutils libhyprutils.so
+         hyprwayland-scanner
+         libinih
+         pipewire
+         qt6-base
+         qt6-wayland
+         sdbus-cpp libsdbus-c++.so
+         util-linux-libs libuuid.so
+         xdg-desktop-portal)
+makedepends=(cmake
+             hyprland-protocols
+             wayland
+             wayland-protocols)
+optdepends=('grim: required for the screenshot portal to function'
+            'slurp: support for interactive mode for the screenshot portal')
+# source=("git+$url#branch=feat/input-capture-impl")
+source=("git+$url#branch=feat/input-capture-impl")
+sha256sums=('SKIP')
+
+prepare() {
+	cd "$_srcname"
+  git submodule update --init --recursive 
+	# ln -sf $pkgname "$_archive"
+	# cd "$_archive/subprojects"
+	# rm -rf sdbus-cpp
+}
+
+build() {
+	cd "$_srcname"
+  sudo cp subprojects/hyprland-protocols/protocols/hyprland-input-capture-v1.xml /usr/share/hyprland-protocols/protocols/
+	cmake -B build \
+		-D CMAKE_INSTALL_PREFIX=/usr \
+		-D CMAKE_INSTALL_LIBEXECDIR=/usr/lib \
+		-D CMAKE_BUILD_TYPE=Release
+	cmake --build build
+  sudo rm /usr/share/hyprland-protocols/protocols/hyprland-input-capture-v1.xml
+}
+
+package() {
+	cd "$_srcname"
+	DESTDIR="$pkgdir" cmake --install build
+	install -Dm0644 -t "$pkgdir/usr/share/licenses/$_srcname/" LICENSE
+  install -Dm0644 subprojects/hyprland-protocols/protocols/hyprland-input-capture-v1.xml \
+  "$pkgdir/usr/share/hyprland-protocols/protocols/hyprland-input-capture-v1.xml"
+}

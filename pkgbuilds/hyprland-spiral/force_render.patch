@@ -1,0 +1,14 @@
+diff --git a/src/render/Renderer.cpp b/src/render/Renderer.cpp
+index 7b5cf475..4dcd288b 100644
+--- a/src/render/Renderer.cpp
++++ b/src/render/Renderer.cpp
+@@ -509,7 +509,8 @@ void CHyprRenderer::renderWindow(PHLWINDOW pWindow, PHLMONITOR pMonitor, const T
+ 
+     renderdata.surface   = pWindow->m_wlSurface->resource();
+     renderdata.dontRound = pWindow->isEffectiveInternalFSMode(FSMODE_FULLSCREEN) || pWindow->m_windowData.noRounding.valueOrDefault();
+-    renderdata.fadeAlpha = pWindow->m_alpha->value() * (pWindow->m_pinned || USE_WORKSPACE_FADE_ALPHA ? 1.f : PWORKSPACE->m_alpha->value()) *
++    float workspaceAlpha = PWORKSPACE && PWORKSPACE->m_forceRendering ? 1.f : PWORKSPACE->m_alpha->value();
++    renderdata.fadeAlpha = pWindow->m_alpha->value() * (pWindow->m_pinned || USE_WORKSPACE_FADE_ALPHA ? 1.f : workspaceAlpha) *
+         (USE_WORKSPACE_FADE_ALPHA ? pWindow->m_movingToWorkspaceAlpha->value() : 1.F) * pWindow->m_movingFromWorkspaceAlpha->value();
+     renderdata.alpha         = pWindow->m_activeInactiveAlpha->value();
+     renderdata.decorate      = decorate && !pWindow->m_X11DoesntWantBorders && !pWindow->isEffectiveInternalFSMode(FSMODE_FULLSCREEN);
