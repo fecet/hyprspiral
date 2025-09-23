@@ -34,9 +34,6 @@ jobs:
             base-devel \
             cmake \
             git \
-            hyprland \
-            hyprutils \
-            hyprlang \
             pixman \
             libdrm \
             cairo \
