@@ -9,14 +9,39 @@ extern HANDLE PHANDLE;
 extern std::function<SDispatchResult(std::string)> orig_moveFocusTo;
 extern ScrollerSizes scroller_sizes;
 
+namespace {
+// Normalize window heights around 2-window transitions
+inline void reset_both_window_heights_if_two(List<Window *> &windows, double maxh) {
+    if (windows.size() == 2) {
+        for (auto it = windows.first(); it != nullptr; it = it->next()) {
+            auto win = it->data();
+            win->update_height(scroller_sizes.get_window_default_height(win->get_window()), maxh);
+        }
+    }
+}
+
+// Apply single-row height when a column holds exactly one window
+inline void apply_single_row_height_if_one(ListNode<Window *> *active, size_t count, double maxh) {
+    if (count == 1 && active != nullptr) {
+        active->data()->update_height(scroller_sizes.get_single_row_height(), maxh);
+    }
+}
+} // namespace
 Column::Column(PHLWINDOW cwindow, const Row *row)
     : reorder(Reorder::Auto), row(row)
 {
-    width = scroller_sizes.get_column_default_width(cwindow);
+    // If this is the first column in the workspace, use the configured
+    // single-column width. Otherwise, fall back to the default column width.
+    if (row->size() == 0)
+        width = scroller_sizes.get_single_column_width();
+    else
+        width = scroller_sizes.get_column_default_width(cwindow);
     const Box &max = row->get_max();
     Window *window = new Window(cwindow, max.y, max.h, width);
     windows.push_back(window);
     active = windows.first();
+    // If this column starts with a single window, apply single-row height
+    apply_single_row_height_if_one(active, windows.size(), max.h);
     update_width(width, max.w);
 
     // We know it will be located on the right of row->active
@@ -36,6 +61,8 @@ Column::Column(Window *window, StandardSize width, double maxw, const Row *row)
     windows.push_back(window);
     active = windows.first();
     update_width(width, maxw);
+    // New column from expelled window: if alone, apply single-row height
+    apply_single_row_height_if_one(active, windows.size(), max.h);
 }
 
 Column::Column(const Row *pRow, const Column *column, List<Window *> &pWindows)
@@ -110,6 +137,9 @@ void Column::add_active_window(PHLWINDOW window)
         active = node;
     else
         window->m_noInitialFocus = true;
+
+    // If we just transitioned from 1 -> 2 windows, reset both to default heights
+    reset_both_window_heights_if_two(windows, row->get_max().h);
 }
 
 void Column::remove_window(PHLWINDOW window)
@@ -129,6 +159,8 @@ void Column::remove_window(PHLWINDOW window)
                 win->data()->pin(false);
             windows.erase(win);
             delete win->data();
+            // If only one window remains, apply single-row height
+            apply_single_row_height_if_one(active, windows.size(), row->get_max().h);
             return;
         }
     }
@@ -347,6 +379,8 @@ void Column::admit_window(Window *window)
 {
     reorder = Reorder::Auto;
     active = windows.emplace_after(active, window);
+    // If we just transitioned from 1 -> 2 windows, reset both to default heights
+    reset_both_window_heights_if_two(windows, row->get_max().h);
 }
 
 Window *Column::expel_active(const Vector2D &gap_x)
@@ -360,6 +394,8 @@ Window *Column::expel_active(const Vector2D &gap_x)
     if (windows.size() == 1) {
         double maxw = width == StandardSize::Free ? active->data()->get_geom_w(gap_x) : row->get_max().w;
         update_width(active->data()->get_width(), maxw);
+        // and apply single-row height
+        apply_single_row_height_if_one(active, windows.size(), row->get_max().h);
     }
     return window;
 }
@@ -715,4 +751,3 @@ void Column::pin(bool pin) const
         win->data()->pin(pin);
     }
 }
-
