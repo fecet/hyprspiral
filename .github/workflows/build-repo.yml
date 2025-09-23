@@ -1,0 +1,121 @@
+---
+name: Build Pacman Repo
+permissions:
+  contents: write
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  build-pacman-repo:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux/archlinux:base-devel
+    env:
+      CONTAINER_DIR: pkgbuilds
+    strategy:
+      fail-fast: true
+    steps:
+      - name: Container Setup
+        run: |
+          pacman -Syy --disable-download-timeout --needed --noconfirm \
+            archlinux-keyring
+          pacman -Syu --disable-download-timeout --needed --noconfirm \
+            base-devel \
+            cmake \
+            git \
+            hyprland \
+            hyprutils \
+            hyprlang \
+            pixman \
+            libdrm \
+            cairo \
+            pango \
+            wget
+          pacman -Scc --noconfirm
+
+      - name: Download Pacman Repo Builder
+        run: |
+          wget \
+            "https://github.com/LizardByte/pacman-repo-builder/releases/latest/download/build-pacman-repo" \
+            -O /usr/bin/build-pacman-repo
+          chmod +x /usr/bin/build-pacman-repo
+
+          # patch makepkg to allow running as root
+          build-pacman-repo patch-makepkg --replace
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Configure Git directory
+        run: git config --global --add safe.directory /__w/hyprspiral/hyprspiral
+
+      - name: Init
+        run: |
+          # create the destination directory for built packages
+          mkdir -p repo
+
+          # patch the build flags
+          # shellcheck disable=SC2016  # we don't want to expand the expression here
+          sed -i 's,#MAKEFLAGS="-j2",MAKEFLAGS="-j$(nproc)",g' /etc/makepkg.conf
+
+      - name: Build Pacman Repo
+        run: |
+          # generate build-pacman-repo.yaml
+          build-pacman-repo print-config \
+            --repository repo/hyprspiral.db.tar.gz \
+            --container "${CONTAINER_DIR}" \
+            --require-pkgbuild \
+            --require-srcinfo \
+            --with-record-failed-builds repo/failed-build-records.yaml \
+            --with-install-missing-dependencies true \
+            --with-clean-before-build false \
+            --with-clean-after-build false \
+            --with-force-rebuild true \
+            --with-pacman pacman \
+            --with-arch-filter x86_64 \
+            --with-check inherit \
+            --with-packager "hyprspiral builder <builder@hyprspiral.local>" \
+            --with-allow-failure false \
+            --with-dereference-database-symlinks true \
+            > build-pacman-repo.yaml
+
+          # validate .SRCINFO files
+          build-pacman-repo sync-srcinfo || \
+            echo "::warning:: .SRCINFO files mismatch" >> "${GITHUB_STEP_SUMMARY}" && \
+            build-pacman-repo sync-srcinfo -u
+
+          # build the packages and create the repo
+          build-pacman-repo build
+
+          # ensure files are present in the repo
+          repo_files=$(ls repo)
+          if [[ -z "${repo_files}" ]]; then
+            echo "::error:: No files found in repo"
+            exit 1
+          fi
+
+      - name: Create/Update GitHub Release
+        if: github.event_name == 'push'
+        uses: ncipollo/release-action@v1.20.0
+        with:
+          allowUpdates: true
+          artifactErrorsFailBuild: true
+          artifacts: repo/*
+          bodyFile: README.md
+          commit: main
+          makeLatest: true
+          name: Latest Release
+          prerelease: false
+          tag: latest
+          token: ${{ secrets.GITHUB_TOKEN }}
