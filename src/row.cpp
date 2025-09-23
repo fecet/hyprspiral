@@ -3,8 +3,11 @@
 #include <hyprland/src/managers/EventManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <vector>
+#include <array>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/managers/LayoutManager.hpp>
 #include <format>
@@ -1179,24 +1182,29 @@ bool Row::is_overview() const
     return overview;
 }
 
-void Row::toggle_overview()
+void Row::toggle_overview(std::optional<Box> viewport)
 {
     if (columns.size() == 0)
         return;
+
     auto window = get_active_window();
     if (!window || !window->m_workspace || !window->m_workspace->m_monitor)
         return;
+
     PHLMONITOR monitor = window->m_workspace->m_monitor.lock();
     overview = !overview;
     post_event("overview");
-    static auto *const *overview_scale_content = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:overview_scale_content")->getDataStaticPtr();
+
+    static auto *const *overview_scale_content =
+        (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(
+            PHANDLE, "plugin:scroller:overview_scale_content")
+            ->getDataStaticPtr();
+
     if (overview) {
-        // Turn off fullscreen mode if enabled
         preoverview_fsmode = window_fullscreen_state(window);
-        if (preoverview_fsmode != eFullscreenMode::FSMODE_NONE) {
+        if (preoverview_fsmode != eFullscreenMode::FSMODE_NONE)
             toggle_window_fullscreen_internal(window, preoverview_fsmode);
-        }
-        // Find the bounding box
+
         Vector2D bmin(max.x + max.w, max.y + max.h);
         Vector2D bmax(max.x, max.y);
         for (auto c = columns.first(); c != nullptr; c = c->next()) {
@@ -1212,24 +1220,36 @@ void Row::toggle_overview()
             if (cheight.y > bmax.y)
                 bmax.y = cheight.y;
         }
+
         double w = bmax.x - bmin.x;
         double h = bmax.y - bmin.y;
-        double scale = std::min(max.w / w, max.h / h);
 
-        bool overview_scaled;
-        if (**overview_scale_content && overviews->enable(workspace)) {
-            overview_scaled = true;
+        const Box container = viewport.has_value() ? viewport.value() : Box(max.x, max.y, max.w, max.h);
+
+        // When aggregating (viewport.has_value()), show only the visible region of the workspace (Row::max)
+        // to keep per-workspace size/position stable and independent of content.
+        const bool aggregate_visible_only = viewport.has_value();
+        double scale;
+        if (aggregate_visible_only) {
+            scale = std::min(container.w / max.w, container.h / max.h);
+            scale = std::min(1.0, scale);
         } else {
-            overview_scaled = false;
+            scale = std::min(container.w / w, container.h / h);
         }
 
+        bool overview_scaled = !aggregate_visible_only && **overview_scale_content && overviews->enable(workspace);
+
         if (overview_scaled) {
-            Vector2D offset(0.5 * (monitor->m_size.x - w * scale) / scale, 0.5 * (monitor->m_size.y - h * scale) / scale);
+            Vector2D offset(0.5 * (monitor->m_size.x - w * scale) / scale,
+                            0.5 * (monitor->m_size.y - h * scale) / scale);
             for (auto c = columns.first(); c != nullptr; c = c->next()) {
                 Column *col = c->data();
                 col->push_overview_geom();
                 Vector2D cheight = col->get_height();
-                col->set_geom_pos(offset.x + monitor->m_position.x + (col->get_geom_x() - bmin.x), offset.y + monitor->m_position.y + (cheight.x - bmin.y));
+                col->set_geom_pos(offset.x + monitor->m_position.x +
+                                      (col->get_geom_x() - bmin.x),
+                                  offset.y + monitor->m_position.y +
+                                      (cheight.x - bmin.y));
             }
             adjust_overview_columns();
 
@@ -1240,17 +1260,51 @@ void Row::toggle_overview()
 
             overviews->set_scale(workspace, scale);
         } else {
-            Vector2D offset(0.5 * (max.w - w * scale), 0.5 * (max.h - h * scale));
-            for (auto c = columns.first(); c != nullptr; c = c->next()) {
-                Column *col = c->data();
-                col->push_overview_geom();
-                Vector2D cheight = col->get_height();
-                col->set_geom_pos(offset.x + max.x + (col->get_geom_x() - bmin.x) * scale, offset.y + max.y + (cheight.x - bmin.y) * scale);
-                col->set_geom_w(col->get_geom_w() * scale);
-                Vector2D start(offset.x + max.x, offset.y + max.y);
-                col->scale(bmin, start, scale, gap);
+            if (aggregate_visible_only) {
+                // Clamp each column to the visible region [max.x, max.x + max.w)
+                Vector2D offset(0.5 * (container.w - max.w * scale),
+                                0.5 * (container.h - max.h * scale));
+                const Vector2D start(container.x + offset.x, container.y + offset.y);
+                for (auto c = columns.first(); c != nullptr; c = c->next()) {
+                    Column *col = c->data();
+                    col->push_overview_geom();
+                    Vector2D cheight = col->get_height();
+                    const double cx = col->get_geom_x();
+                    const double cw = col->get_geom_w();
+                    const double visL = std::max(cx, max.x);
+                    const double visR = std::min(cx + cw, max.x + max.w);
+                    const double visW = visR - visL;
+                    if (visW <= 0.0) {
+                        // Move fully invisible columns far off-screen on this monitor
+                        col->set_geom_pos(monitor->m_position.x + monitor->m_size.x + 10000.0,
+                                          monitor->m_position.y);
+                        col->set_geom_w(1.0);
+                        // No scale for hidden columns
+                        continue;
+                    }
+                    col->set_geom_pos(start.x + (visL - max.x) * scale,
+                                      start.y + (cheight.x - max.y) * scale);
+                    col->set_geom_w(visW * scale);
+                    // Scale windows relative to the clamped left edge
+                    col->scale(Vector2D(visL, max.y), start, scale, gap);
+                }
+                adjust_overview_columns();
+            } else {
+                // Legacy: fit full content bounds into container
+                Vector2D offset(0.5 * (container.w - w * scale),
+                                0.5 * (container.h - h * scale));
+                for (auto c = columns.first(); c != nullptr; c = c->next()) {
+                    Column *col = c->data();
+                    col->push_overview_geom();
+                    Vector2D cheight = col->get_height();
+                    col->set_geom_pos(container.x + offset.x + (col->get_geom_x() - bmin.x) * scale,
+                                      container.y + offset.y + (cheight.x - bmin.y) * scale);
+                    col->set_geom_w(col->get_geom_w() * scale);
+                    Vector2D start(container.x + offset.x, container.y + offset.y);
+                    col->scale(bmin, start, scale, gap);
+                }
+                adjust_overview_columns();
             }
-            adjust_overview_columns();
             overviews->set_scale(workspace, 1.0f);
         }
     } else {
@@ -1259,30 +1313,26 @@ void Row::toggle_overview()
         g_pHyprRenderer->damageMonitor(monitor);
         g_pConfigManager->ensureVRR(monitor);
         g_pCompositor->updateSuspendedStates();
-        for (auto c = columns.first(); c != nullptr; c = c->next()) {
-            Column *col = c->data();
-            col->pop_overview_geom();
-        }
-        // Try to maintain the positions except if the active is not visible,
-        // in that case, make it visible.
+
+        for (auto c = columns.first(); c != nullptr; c = c->next())
+            c->data()->pop_overview_geom();
+
         Column *acolumn = active->data();
-        if (acolumn->get_geom_x() < max.x) {
+        if (acolumn->get_geom_x() < max.x)
             acolumn->set_geom_pos(max.x, max.y);
-        } else if (acolumn->get_geom_x() + acolumn->get_geom_w() > max.x + max.w) {
-            acolumn->set_geom_pos(max.x + max.w - acolumn->get_geom_w(), max.y);
-        }
+        else if (acolumn->get_geom_x() + acolumn->get_geom_w() > max.x + max.w)
+            acolumn->set_geom_pos(max.x + max.w - acolumn->get_geom_w(),
+                                  max.y);
+
         adjust_columns(active);
-        // Turn fullscreen mode back on if enabled
-        auto window = get_active_window();
+
         window->warpCursor();
-        if (preoverview_fsmode != eFullscreenMode::FSMODE_NONE) {
+        if (preoverview_fsmode != eFullscreenMode::FSMODE_NONE)
             toggle_window_fullscreen_internal(window, preoverview_fsmode);
-        }
     }
 
-    for (auto const& m : g_pCompositor->m_monitors) {
-        g_pHyprRenderer->damageMonitor(m);
-    }
+    for (auto const& monitor_it : g_pCompositor->m_monitors)
+        g_pHyprRenderer->damageMonitor(monitor_it);
 }
 
 void Row::update_windows(const Box &oldmax, bool force)
