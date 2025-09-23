@@ -83,6 +83,7 @@ public:
     void trailmark_prev();
 
     void jump();
+    void jump_allworkspace();
 
     void post_event(WORKSPACEID workspace, const std::string &event);
 
