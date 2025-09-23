@@ -31,6 +31,8 @@ ModeModifier::ModeModifier(const std::string &arg) : ModeModifier() {
             set_auto_param(std::stoi(args[i].substr(pos + 5)));
         } else if (args[i] == "manual")
             set_auto_mode(ModeModifier::AUTO_MANUAL);
+        else if (args[i] == "spiral")
+            set_auto_mode(ModeModifier::AUTO_SPIRAL);
 
         if (args[i] == "center_column")
             set_center_column(true);
@@ -99,8 +101,11 @@ int ModeModifier::get_auto_mode(bool force_default) const {
 }
 
 std::string ModeModifier::get_auto_mode_string() const {
-    if (get_auto_mode() == AUTO_MANUAL)
+    auto mode = get_auto_mode();
+    if (mode == AUTO_MANUAL)
         return "manual";
+    else if (mode == AUTO_SPIRAL)
+        return "spiral";
     return "auto";
 }
 
