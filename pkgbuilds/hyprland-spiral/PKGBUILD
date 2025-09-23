@@ -66,6 +66,7 @@ optdepends=('cmake: to build and install plugins using hyprpm'
   'meson: to build and install plugins using hyprpm'
   'uwsm: the recommended way to start Hyprland')
 provides=(wayland-compositor "hyprland=${pkgver}")
+conflicts=('hyprland')
 source=("git+$url"
   "force_render.patch")
 sha256sums=('SKIP'
