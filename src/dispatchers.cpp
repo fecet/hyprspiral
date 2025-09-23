@@ -459,6 +459,14 @@ namespace dispatchers {
 
         return {};
     }
+    SDispatchResult dispatch_jumpallworkspace(std::string) {
+        if (g_pLayoutManager->getCurrentLayout() != g_ScrollerLayout.get())
+            return { .success = false, .error = "scroller:jumpallworkspace: called while not running hyprscroller" };
+
+        g_ScrollerLayout->jump_allworkspace();
+
+        return {};
+    }
     void addDispatchers() {
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:cyclesize", dispatch_cyclesize);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:cyclewidth", dispatch_cyclewidth);
@@ -468,6 +476,7 @@ namespace dispatchers {
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:setheight", dispatch_setheight);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:movefocus", dispatch_movefocus);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:movewindow", dispatch_movewindow);
+        HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:jumpallworkspace", dispatch_jumpallworkspace);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:alignwindow", dispatch_alignwindow);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:admitwindow", dispatch_admitwindow);
         HyprlandAPI::addDispatcherV2(PHANDLE, "scroller:expelwindow", dispatch_expelwindow);

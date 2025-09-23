@@ -2,6 +2,7 @@
 #define SCROLLER_ROW_H
 
 #include "column.h"
+#include <optional>
 
 class Row {
 public:
@@ -72,7 +73,7 @@ public:
     void set_fullscreen_mode(PHLWINDOW window, eFullscreenMode cur_mode, eFullscreenMode new_mode);
     void fit_size(FitSize fitsize);
     bool is_overview() const;
-    void toggle_overview();
+    void toggle_overview(std::optional<Box> viewport = std::nullopt);
     void update_windows(const Box &oldmax, bool force);
     void recalculate_row_geometry();
 

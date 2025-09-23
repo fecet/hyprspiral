@@ -20,6 +20,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <cmath>
 
 
 extern HANDLE PHANDLE;
@@ -1246,6 +1247,8 @@ typedef struct JumpData {
     int keys_pressed = 0;
     int nkeys;
     unsigned int window_number = 0;
+    // monitors/workspaces for which we explicitly enabled overview-all
+    std::vector<WORKSPACEID> toggled_wsids;
     SP<HOOK_CALLBACK_FN> keyPressHookCallback;
 } JumpData;
 
@@ -1269,26 +1272,30 @@ void ScrollerLayout::jump() {
 
     jumping = true;
     jump_data = new JumpData;
-
-    for (auto monitor : g_pCompositor->m_monitors) {
-        WORKSPACEID workspace_id = monitor->activeSpecialWorkspaceID();
-        if (!workspace_id) {
-            workspace_id = monitor->activeWorkspaceID();
-        }
-        auto s = getRowForWorkspace(workspace_id);
-        if (s == nullptr)
-            continue;
-
-        jump_data->workspaces.push_back({s, s->is_overview()});
-    }
-    if (jump_data->workspaces.size() == 0) {
+    auto PMON = g_pCompositor->m_lastMonitor.lock();
+    if (!PMON) {
         delete jump_data;
         jumping = false;
         return;
     }
-
-    for (auto workspace : jump_data->workspaces) {
-        workspace.row->get_windows(jump_data->windows);
+    WORKSPACEID wsid = PMON->activeSpecialWorkspaceID();
+    if (!wsid)
+        wsid = PMON->activeWorkspaceID();
+    if (!wsid) {
+        delete jump_data;
+        jumping = false;
+        return;
+    }
+    if (auto row = getRowForWorkspace(wsid)) {
+        jump_data->workspaces.push_back({row, row->is_overview()});
+        row->get_windows(jump_data->windows);
+        if (!row->is_overview())
+            row->toggle_overview();
+    }
+    if (jump_data->workspaces.empty()) {
+        delete jump_data;
+        jumping = false;
+        return;
     }
     if (jump_data->windows.size() == 0) {
         delete jump_data;
@@ -1310,13 +1317,6 @@ void ScrollerLayout::jump() {
         jump_data->nkeys = 1;
     else
         jump_data->nkeys = std::ceil(std::log10(jump_data->windows.size()) / std::log10(jump_data->keys.size()));
-
-    // Set overview mode for those workspaces that are not
-    for (auto workspace : jump_data->workspaces) {
-        if (!workspace.overview) {
-            workspace.row->toggle_overview();
-        }
-    }
 
     // Set decorations (in overview mode)
     int i = 0;
@@ -1379,6 +1379,164 @@ void ScrollerLayout::jump() {
             update_relative_cursor_coords(jump_data->from_window.lock());
             switch_to_window(jump_data->from_window.lock(),
                              jump_data->windows[jump_data->window_number].lock());
+        } else {
+            if (jump_data->from_window != nullptr)
+                jump_data->from_window->warpCursor();
+            else {
+                g_pCompositor->warpCursorTo(jump_data->from_monitor.lock()->middle());
+                g_pCompositor->setActiveMonitor(jump_data->from_monitor.lock());
+            }
+        }
+        info.cancelled = true;
+        jump_data->keyPressHookCallback.reset();
+        delete jump_data;
+        jumping = false;
+    });
+}
+
+void ScrollerLayout::jump_allworkspace() {
+    if (jumping)
+        return;
+
+    jumping = true;
+    jump_data = new JumpData;
+
+    auto PMON = g_pCompositor->m_lastMonitor.lock();
+    if (!PMON) {
+        delete jump_data;
+        jumping = false;
+        return;
+    }
+
+    
+    std::vector<Row*> monitorRows;
+    std::vector<WORKSPACEID> wsids;
+    for (auto const& ws : g_pCompositor->getWorkspaces()) {
+        if (!ws || ws->m_isSpecialWorkspace)
+            continue;
+        if (ws->m_monitor.lock() != PMON)
+            continue;
+        if (ws->getWindows() <= 0)
+            continue;
+        if (auto row = getRowForWorkspace(ws->m_id)) {
+            monitorRows.push_back(row);
+            wsids.push_back(ws->m_id);
+        }
+    }
+    if (monitorRows.empty()) {
+        delete jump_data;
+        jumping = false;
+        return;
+    }
+
+    
+    std::vector<std::pair<WORKSPACEID, bool>> forceBackup;
+    forceBackup.reserve(wsids.size());
+    for (size_t i = 0; i < wsids.size(); ++i) {
+        Row* row = monitorRows[i];
+        jump_data->workspaces.push_back({row, row->is_overview()});
+        if (auto ws = g_pCompositor->getWorkspaceByID(wsids[i]))
+            forceBackup.push_back({wsids[i], ws->m_forceRendering});
+        if (row->is_overview())
+            row->toggle_overview();
+    }
+
+    
+    const Box container = monitorRows.front()->get_max();
+    const size_t count = monitorRows.size();
+    const size_t cols = std::ceil(std::sqrt(static_cast<double>(count)));
+    const size_t rowsCount = std::ceil(static_cast<double>(count) / static_cast<double>(cols));
+    const double tileW = container.w / static_cast<double>(cols);
+    const double tileH = container.h / static_cast<double>(rowsCount);
+
+    for (size_t i = 0; i < wsids.size(); ++i) {
+        Row* row = monitorRows[i];
+        const size_t r = i / cols;
+        const size_t c = i % cols;
+        Box tile(container.x + c * tileW, container.y + r * tileH, tileW, tileH);
+        row->toggle_overview(tile);
+        if (auto ws = g_pCompositor->getWorkspaceByID(wsids[i]))
+            ws->m_forceRendering = true;
+        row->get_windows(jump_data->windows);
+    }
+
+    
+    static auto const *KEYS = (Hyprlang::STRING const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:jump_labels_keys")->getDataStaticPtr();
+    jump_data->keys = *KEYS;
+    jump_data->from_window = g_pCompositor->m_lastWindow;
+    jump_data->from_monitor = g_pCompositor->m_lastMonitor;
+
+    if (jump_data->keys.size() == 1 && jump_data->windows.size() > 1) {
+        for (auto row : monitorRows) if (row->is_overview()) row->toggle_overview();
+        for (auto &fb : forceBackup) if (auto ws = g_pCompositor->getWorkspaceByID(fb.first)) ws->m_forceRendering = fb.second;
+        for (auto w : jump_data->workspaces) if (w.overview) w.row->toggle_overview();
+        delete jump_data; jumping = false; return;
+    }
+    if (jump_data->windows.size() == 1)
+        jump_data->nkeys = 1;
+    else
+        jump_data->nkeys = std::ceil(std::log10(jump_data->windows.size()) / std::log10(jump_data->keys.size()));
+
+    int i = 0;
+    for (auto window : jump_data->windows) {
+        const std::string label = generate_label(i++, jump_data->keys, jump_data->nkeys);
+        auto deco = makeUnique<JumpDecoration>(window.lock(), label);
+        jump_data->decorations.push_back(deco.get());
+        HyprlandAPI::addWindowDecoration(PHANDLE, window.lock(), std::move(deco));
+    }
+
+    jump_data->keys_pressed = 0;
+    jump_data->window_number = 0;
+
+    jump_data->keyPressHookCallback = HyprlandAPI::registerCallbackDynamic(PHANDLE, "keyPress", [this, monitorRows, forceBackup = std::move(forceBackup)](void* /* self */, SCallbackInfo& info, std::any param) mutable {
+        auto keypress_event = std::any_cast<std::unordered_map<std::string, std::any>>(param);
+        auto keyboard = std::any_cast<SP<IKeyboard>>(keypress_event["keyboard"]);
+        auto event = std::any_cast<IKeyboard::SKeyEvent>(keypress_event["event"]);
+
+        const auto KEYCODE = event.keycode + 8;
+        const xkb_keysym_t keysym = xkb_state_key_get_one_sym(keyboard->m_xkbState, KEYCODE);
+
+        if (event.state != WL_KEYBOARD_KEY_STATE_PRESSED)
+            return;
+
+        bool valid = false;
+        for (int i = 0; i < jump_data->keys.size(); ++i) {
+            std::string keyname(1, jump_data->keys[i]);
+            xkb_keysym_t key = xkb_keysym_from_name(keyname.c_str(), XKB_KEYSYM_NO_FLAGS);
+            if (key && key == keysym) {
+                jump_data->window_number = jump_data->window_number * jump_data->keys.size() + i;
+                valid = true;
+                break;
+            }
+        }
+        bool focus = false;
+        if (valid) {
+            jump_data->keys_pressed++;
+            if (jump_data->keys_pressed == jump_data->nkeys) {
+                if (jump_data->window_number < jump_data->windows.size())
+                    focus = true;
+            } else {
+                info.cancelled = true;
+                return;
+            }
+        }
+
+        for (size_t i = 0; i < jump_data->windows.size(); ++i)
+            jump_data->windows[i]->removeWindowDeco(jump_data->decorations[i]);
+
+        for (auto row : monitorRows) {
+            if (row->is_overview()) row->toggle_overview();
+        }
+        for (auto &fb : forceBackup) {
+            if (auto ws = g_pCompositor->getWorkspaceByID(fb.first)) ws->m_forceRendering = fb.second;
+        }
+        for (auto workspace : jump_data->workspaces) {
+            if (workspace.overview) workspace.row->toggle_overview();
+        }
+
+        if (focus) {
+            update_relative_cursor_coords(jump_data->from_window.lock());
+            switch_to_window(jump_data->from_window.lock(), jump_data->windows[jump_data->window_number].lock());
         } else {
             if (jump_data->from_window != nullptr)
                 jump_data->from_window->warpCursor();
