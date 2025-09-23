@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: update-srcinfo
+        name: Update .SRCINFO for PKGBUILD
+        entry: bash -c 'for pkgbuild in $(git diff --cached --name-only | grep "PKGBUILD$"); do dir=$(dirname "$pkgbuild"); (cd "$dir" && makepkg --printsrcinfo > .SRCINFO && git add .SRCINFO); done'
+        language: system
+        files: PKGBUILD$
+        pass_filenames: false
