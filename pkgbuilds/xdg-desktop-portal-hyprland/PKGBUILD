@@ -22,11 +22,11 @@ depends=(gcc-libs
          qt6-wayland
          sdbus-cpp libsdbus-c++.so
          util-linux-libs libuuid.so
-         xdg-desktop-portal)
+         xdg-desktop-portal hyprland-spiral)
 makedepends=(cmake
              hyprland-protocols
              wayland
-             wayland-protocols)
+             wayland-protocols hyprland-spiral)
 optdepends=('grim: required for the screenshot portal to function'
             'slurp: support for interactive mode for the screenshot portal')
 # source=("git+$url#branch=feat/input-capture-impl")

@@ -87,6 +87,7 @@ pkgbase = hyprland-spiral
 	optdepends = uwsm: the recommended way to start Hyprland
 	provides = wayland-compositor
 	provides = hyprland=0.51.0
+	conflicts = hyprland
 	source = git+https://github.com/lxe/Hyprland
 	source = force_render.patch
 	sha256sums = SKIP
