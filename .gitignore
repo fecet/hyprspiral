@@ -4,3 +4,10 @@ hyprscroller.so
 .cache/
 compile_commands.json
 result
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+pkgbuilds/*/*
+!pkgbuilds/*/PKGBUILD
+!pkgbuilds/*/.SRCINFO
+!pkgbuilds/*/*.patch
