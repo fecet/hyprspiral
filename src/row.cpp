@@ -65,6 +65,138 @@ Row::~Row()
 void Row::find_auto_insert_point(Mode &new_mode, ListNode<Column *> *&new_active)
 {
     auto auto_mode = modifier.get_auto_mode();
+
+    if (auto_mode == ModeModifier::AUTO_SPIRAL) {
+        std::vector<ListNode<Column *> *> column_nodes;
+        column_nodes.reserve(columns.size());
+
+        size_t total_windows = 0;
+        for (auto col = columns.first(); col != nullptr; col = col->next()) {
+            column_nodes.push_back(col);
+            total_windows += col->data()->size();
+        }
+
+        const size_t column_count = column_nodes.size();
+
+        if (column_count == 0 || total_windows == 0) {
+            modifier.set_position(ModeModifier::POSITION_AFTER);
+            new_mode = Mode::Row;
+            new_active = nullptr;
+            return;
+        }
+
+        auto get_spiral_coord = [](size_t index) -> std::pair<int, int> {
+            if (index <= 1)
+                return {0, 0};
+
+            int x = 0;
+            int y = 0;
+            size_t placed = 1;
+            size_t step_len = 1;
+            size_t leg = 0;
+            const std::array<std::pair<int, int>, 4> directions{{{1, 0}, {0, 1}, {-1, 0}, {0, -1}}};
+            size_t dir_idx = 0;
+
+            while (placed < index) {
+                const auto [dx, dy] = directions[dir_idx];
+                for (size_t step = 0; step < step_len && placed < index; ++step) {
+                    x += dx;
+                    y += dy;
+                    ++placed;
+                }
+                dir_idx = (dir_idx + 1) % directions.size();
+                ++leg;
+                if (leg % 2 == 0)
+                    ++step_len;
+            }
+
+            return {x, y};
+        };
+
+        auto map_x_to_column = [](int x, int min_x, int max_x, size_t count) -> size_t {
+            if (count <= 1 || min_x == max_x)
+                return 0;
+
+            const double fraction = static_cast<double>(x - min_x) / static_cast<double>(max_x - min_x);
+            const double scaled = fraction * static_cast<double>(count - 1);
+            const auto idx = static_cast<size_t>(std::llround(scaled));
+            return std::clamp(idx, size_t(0), count - 1);
+        };
+
+        int min_x_current = std::numeric_limits<int>::max();
+        int max_x_current = std::numeric_limits<int>::min();
+        for (size_t idx = 1; idx <= total_windows; ++idx) {
+            const auto [x, _] = get_spiral_coord(idx);
+            min_x_current = std::min(min_x_current, x);
+            max_x_current = std::max(max_x_current, x);
+        }
+
+        if (min_x_current == std::numeric_limits<int>::max()) {
+            min_x_current = 0;
+            max_x_current = 0;
+        }
+
+        std::vector<std::vector<int>> expected_ys(column_count);
+        std::vector<size_t> actual_counts(column_count);
+        for (size_t idx = 0; idx < column_count; ++idx)
+            actual_counts[idx] = column_nodes[idx]->data()->size();
+
+        for (size_t idx = 1; idx <= total_windows; ++idx) {
+            const auto [x, y] = get_spiral_coord(idx);
+            const auto column_idx = map_x_to_column(x, min_x_current, max_x_current, column_count);
+            expected_ys[column_idx].push_back(y);
+        }
+
+        std::vector<size_t> remaining = actual_counts;
+        size_t missing_index = 0;
+        for (size_t idx = 1; idx <= total_windows; ++idx) {
+            const auto [x, _] = get_spiral_coord(idx);
+            const auto column_idx = map_x_to_column(x, min_x_current, max_x_current, column_count);
+            if (remaining[column_idx] > 0) {
+                --remaining[column_idx];
+            } else {
+                missing_index = idx;
+                break;
+            }
+        }
+
+        const size_t target_index = missing_index > 0 ? missing_index : total_windows + 1;
+        const auto [target_x, target_y] = get_spiral_coord(target_index);
+
+        if (missing_index == 0 && (target_x < min_x_current || target_x > max_x_current)) {
+            new_mode = Mode::Row;
+            if (target_x < min_x_current)
+                modifier.set_position(ModeModifier::POSITION_BEGINNING);
+            else
+                modifier.set_position(ModeModifier::POSITION_END);
+            new_active = nullptr;
+            return;
+        }
+
+        const auto column_idx = map_x_to_column(target_x, min_x_current, max_x_current, column_count);
+        new_mode = Mode::Column;
+        new_active = column_nodes[column_idx];
+
+        auto position = ModeModifier::POSITION_AFTER;
+        const auto &column_expectation = expected_ys[column_idx];
+        if (!column_expectation.empty()) {
+            const auto [current_min, current_max] = std::minmax_element(column_expectation.begin(), column_expectation.end());
+            if (target_y <= *current_min)
+                position = ModeModifier::POSITION_BEGINNING;
+            else if (target_y >= *current_max)
+                position = ModeModifier::POSITION_END;
+            else if (target_y < 0)
+                position = ModeModifier::POSITION_BEGINNING;
+            else if (target_y > 0)
+                position = ModeModifier::POSITION_END;
+        } else {
+            position = target_y <= 0 ? ModeModifier::POSITION_BEGINNING : ModeModifier::POSITION_END;
+        }
+
+        modifier.set_position(position);
+        return;
+    }
+
     if (auto_mode == ModeModifier::AUTO_AUTO) {
         auto auto_param = modifier.get_auto_param();
         if (mode == Mode::Row) {

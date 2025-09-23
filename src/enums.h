@@ -28,7 +28,8 @@ public:
     enum {
         AUTO_UNDEFINED,
         AUTO_MANUAL,
-        AUTO_AUTO
+        AUTO_AUTO,
+        AUTO_SPIRAL
     };
     ModeModifier();
     ModeModifier(const std::string &arg);
