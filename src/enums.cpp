@@ -6,7 +6,7 @@
 
 extern HANDLE PHANDLE;
 
-ModeModifier::ModeModifier() : position(POSITION_UNDEFINED), focus(FOCUS_UNDEFINED), auto_mode(AUTO_UNDEFINED), auto_param(2) {}
+ModeModifier::ModeModifier() : position(POSITION_UNDEFINED), focus(FOCUS_UNDEFINED), auto_mode(AUTO_UNDEFINED), auto_param(3) {}
 
 ModeModifier::ModeModifier(const std::string &arg) : ModeModifier() {
     const auto args = CVarList(arg);
@@ -94,7 +94,7 @@ void ModeModifier::set_auto_param(int param) {
 
 int ModeModifier::get_auto_mode(bool force_default) const {
     if (force_default && auto_mode == AUTO_UNDEFINED)
-        return AUTO_MANUAL;
+        return AUTO_AUTO;
     return auto_mode;
 }
 

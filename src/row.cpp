@@ -67,6 +67,17 @@ void Row::find_auto_insert_point(Mode &new_mode, ListNode<Column *> *&new_active
     auto auto_mode = modifier.get_auto_mode();
     if (auto_mode == ModeModifier::AUTO_AUTO) {
         auto auto_param = modifier.get_auto_param();
+
+        // Guard: handle empty row or no active column on first window
+        // Avoid dereferencing null when default auto mode is enabled.
+        if (columns.size() == 0 || new_active == nullptr) {
+            // If default starts in Column mode but we don't have enough columns yet,
+            // flip to Row to create the first column; otherwise keep current mode.
+            if (new_mode == Mode::Column && columns.size() < static_cast<size_t>(auto_param))
+                new_mode = Mode::Row;
+            return;
+        }
+
         if (mode == Mode::Row) {
             if (active->data()->size() < auto_param) {
                 mode = Mode::Column;
