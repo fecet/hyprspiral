@@ -8,6 +8,9 @@ on:
     tags:
       - '*'
   workflow_dispatch:
+  schedule:
+    # Run daily at 00:00 UTC
+    - cron: '0 0 * * *'
 
 concurrency:
   group: "${{ github.workflow }}-${{ github.ref }}"
@@ -99,16 +102,32 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare Release Info
+        id: release_info
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # Daily/nightly build
+            echo "tag=nightly" >> $GITHUB_OUTPUT
+            echo "name=Nightly Build $(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+          else
+            # Tagged release
+            echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "name=Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "make_latest=true" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create/Update GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: ncipollo/release-action@v1.20.0
         with:
           allowUpdates: true
           artifactErrorsFailBuild: true
           artifacts: repo/*
           generateReleaseNotes: true
-          makeLatest: true
-          name: Release ${{ github.ref_name }}
-          prerelease: false
-          tag: ${{ github.ref_name }}
+          makeLatest: ${{ steps.release_info.outputs.make_latest }}
+          name: ${{ steps.release_info.outputs.name }}
+          prerelease: ${{ steps.release_info.outputs.prerelease }}
+          tag: ${{ steps.release_info.outputs.tag }}
           token: ${{ secrets.GITHUB_TOKEN }}
