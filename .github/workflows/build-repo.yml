@@ -94,12 +94,22 @@ jobs:
 
           # Stage 1: Build Hyprland first (required dependency for plugins)
           echo "::group::Building Hyprland base package"
-          build-pacman-repo build --package hyprland-spiral
+          # Temporarily hide plugin packages to build Hyprland first
+          mkdir -p "${CONTAINER_DIR}/.hidden"
+          mv "${CONTAINER_DIR}/hyprland-plugin-spiral" "${CONTAINER_DIR}/.hidden/" || true
+          mv "${CONTAINER_DIR}/split-monitor-workspaces" "${CONTAINER_DIR}/.hidden/" || true
+
+          build-pacman-repo build
+
+          # Restore plugin packages
+          mv "${CONTAINER_DIR}/.hidden/hyprland-plugin-spiral" "${CONTAINER_DIR}/" || true
+          mv "${CONTAINER_DIR}/.hidden/split-monitor-workspaces" "${CONTAINER_DIR}/" || true
+          rmdir "${CONTAINER_DIR}/.hidden" || true
           echo "::endgroup::"
 
           # Stage 2: Build all plugins and other packages
           echo "::group::Building plugins and dependencies"
-          build-pacman-repo build --exclude hyprland-spiral
+          build-pacman-repo build
           echo "::endgroup::"
 
           # ensure files are present in the repo
