@@ -87,7 +87,7 @@ jobs:
             --with-dereference-database-symlinks true \
             > build-pacman-repo.yaml
 
-          # validate .SRCINFO files
+          # validate .SRCINFO files (before any directory manipulation)
           build-pacman-repo sync-srcinfo || \
             echo "::warning:: .SRCINFO files mismatch" >> "${GITHUB_STEP_SUMMARY}" && \
             build-pacman-repo sync-srcinfo -u
@@ -95,16 +95,17 @@ jobs:
           # Stage 1: Build Hyprland first (required dependency for plugins)
           echo "::group::Building Hyprland base package"
           # Temporarily hide plugin packages to build Hyprland first
-          mkdir -p "${CONTAINER_DIR}/.hidden"
-          mv "${CONTAINER_DIR}/hyprland-plugin-spiral" "${CONTAINER_DIR}/.hidden/" || true
-          mv "${CONTAINER_DIR}/split-monitor-workspaces" "${CONTAINER_DIR}/.hidden/" || true
+          # Do this AFTER sync-srcinfo to avoid validation errors
+          mkdir -p /tmp/hidden_pkgs
+          mv "${CONTAINER_DIR}/hyprland-plugin-spiral" /tmp/hidden_pkgs/ 2>/dev/null || true
+          mv "${CONTAINER_DIR}/split-monitor-workspaces" /tmp/hidden_pkgs/ 2>/dev/null || true
 
           build-pacman-repo build
 
           # Restore plugin packages
-          mv "${CONTAINER_DIR}/.hidden/hyprland-plugin-spiral" "${CONTAINER_DIR}/" || true
-          mv "${CONTAINER_DIR}/.hidden/split-monitor-workspaces" "${CONTAINER_DIR}/" || true
-          rmdir "${CONTAINER_DIR}/.hidden" || true
+          mv /tmp/hidden_pkgs/hyprland-plugin-spiral "${CONTAINER_DIR}/" 2>/dev/null || true
+          mv /tmp/hidden_pkgs/split-monitor-workspaces "${CONTAINER_DIR}/" 2>/dev/null || true
+          rmdir /tmp/hidden_pkgs 2>/dev/null || true
           echo "::endgroup::"
 
           # Stage 2: Build all plugins and other packages
