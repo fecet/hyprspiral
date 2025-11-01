@@ -76,8 +76,8 @@ jobs:
             --require-srcinfo \
             --with-record-failed-builds repo/failed-build-records.yaml \
             --with-install-missing-dependencies true \
-            --with-clean-before-build false \
-            --with-clean-after-build false \
+            --with-clean-before-build true \
+            --with-clean-after-build true \
             --with-force-rebuild true \
             --with-pacman pacman \
             --with-arch-filter x86_64 \
@@ -87,31 +87,15 @@ jobs:
             --with-dereference-database-symlinks true \
             > build-pacman-repo.yaml
 
-          # validate .SRCINFO files (before any directory manipulation)
+          # validate .SRCINFO files
           build-pacman-repo sync-srcinfo || \
             echo "::warning:: .SRCINFO files mismatch" >> "${GITHUB_STEP_SUMMARY}" && \
             build-pacman-repo sync-srcinfo -u
 
-          # Stage 1: Build Hyprland first (required dependency for plugins)
-          echo "::group::Building Hyprland base package"
-          # Temporarily hide plugin packages to build Hyprland first
-          # Do this AFTER sync-srcinfo to avoid validation errors
-          mkdir -p /tmp/hidden_pkgs
-          mv "${CONTAINER_DIR}/hyprland-plugin-spiral" /tmp/hidden_pkgs/ 2>/dev/null || true
-          mv "${CONTAINER_DIR}/split-monitor-workspaces" /tmp/hidden_pkgs/ 2>/dev/null || true
-
+          # Build all packages
+          # build-pacman-repo automatically sorts by dependency order:
+          # hyprland-spiral will be built before hyprland-plugin-spiral
           build-pacman-repo build
-
-          # Restore plugin packages
-          mv /tmp/hidden_pkgs/hyprland-plugin-spiral "${CONTAINER_DIR}/" 2>/dev/null || true
-          mv /tmp/hidden_pkgs/split-monitor-workspaces "${CONTAINER_DIR}/" 2>/dev/null || true
-          rmdir /tmp/hidden_pkgs 2>/dev/null || true
-          echo "::endgroup::"
-
-          # Stage 2: Build all plugins and other packages
-          echo "::group::Building plugins and dependencies"
-          build-pacman-repo build
-          echo "::endgroup::"
 
           # ensure files are present in the repo
           repo_files=$(ls repo)
