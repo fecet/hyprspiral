@@ -4,7 +4,10 @@
 # Contributor: Gabriel Fox <inbox@gabrielfox.dev>
 
 pkgname=hyprland-spiral
-pkgver=0.51.0
+_base_ver=0.51.0
+pkgver=0.51.0.r0.0000000
+# pkgrel tracks our fork's changes (patches, PKGBUILD modifications)
+# This is a placeholder, updated by pkgrel() function
 pkgrel=1
 pkgdesc='a highly customizable dynamic tiling Wayland compositor'
 arch=(x86_64 aarch64)
@@ -65,7 +68,7 @@ optdepends=('cmake: to build and install plugins using hyprpm'
   'hyprland-protocols: to build and install plugins using hyprpm'
   'meson: to build and install plugins using hyprpm'
   'uwsm: the recommended way to start Hyprland')
-provides=(wayland-compositor "hyprland=${pkgver}")
+provides=(wayland-compositor "hyprland=${_base_ver}")
 conflicts=('hyprland')
 source=("git+$url"
   "force_render.patch")
@@ -73,7 +76,21 @@ sha256sums=('SKIP'
   'SKIP')
 
 pkgver() {
-  cat "Hyprland/VERSION" | head -n1
+  # Hybrid approach: show both upstream and our fork version
+  cd Hyprland
+  local hyprland_commits=$(git rev-list --count HEAD)
+  local hyprland_hash=$(git rev-parse --short HEAD)
+
+  cd "$startdir/../.."
+  local fork_commits=$(git rev-list --count HEAD)
+
+  # Format: 0.51.0.r<upstream_commits>.<upstream_hash>.fork<our_commits>
+  # Example: 0.51.0.r9876.abc1234.fork20
+  printf "%s.r%s.%s.fork%s" \
+    "${_base_ver}" \
+    "$hyprland_commits" \
+    "$hyprland_hash" \
+    "$fork_commits"
 }
 
 prepare() {

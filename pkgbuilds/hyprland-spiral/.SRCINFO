@@ -1,6 +1,6 @@
 pkgbase = hyprland-spiral
 	pkgdesc = a highly customizable dynamic tiling Wayland compositor
-	pkgver = 0.51.0
+	pkgver = 0.51.0.r0.0000000
 	pkgrel = 1
 	url = https://github.com/lxe/Hyprland
 	arch = x86_64
