@@ -1,6 +1,6 @@
 pkgbase = hyprland-plugin-spiral
 	pkgdesc = Spiral layout plugin for Hyprland
-	pkgver = 0.51.0
+	pkgver = 0.51.0.r0.0000000
 	pkgrel = 1
 	url = https://github.com/fecet/hyprspiral
 	arch = x86_64

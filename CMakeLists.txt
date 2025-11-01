@@ -13,6 +13,19 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(HYPRLAND REQUIRED hyprland)
 pkg_check_modules(DEPS REQUIRED hyprutils hyprlang pixman-1 libdrm pangocairo)
 
+# Get git commit hash for API version checking
+execute_process(
+    COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE GIT_COMMIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT GIT_COMMIT_HASH)
+    set(GIT_COMMIT_HASH "unknown")
+endif()
+add_compile_definitions(GIT_COMMIT_HASH="${GIT_COMMIT_HASH}")
+
 # Compile flags
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED true)

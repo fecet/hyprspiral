@@ -92,8 +92,15 @@ jobs:
             echo "::warning:: .SRCINFO files mismatch" >> "${GITHUB_STEP_SUMMARY}" && \
             build-pacman-repo sync-srcinfo -u
 
-          # build the packages and create the repo
-          build-pacman-repo build
+          # Stage 1: Build Hyprland first (required dependency for plugins)
+          echo "::group::Building Hyprland base package"
+          build-pacman-repo build --package hyprland-spiral
+          echo "::endgroup::"
+
+          # Stage 2: Build all plugins and other packages
+          echo "::group::Building plugins and dependencies"
+          build-pacman-repo build --exclude hyprland-spiral
+          echo "::endgroup::"
 
           # ensure files are present in the repo
           repo_files=$(ls repo)
