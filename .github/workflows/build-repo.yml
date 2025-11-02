@@ -97,6 +97,13 @@ jobs:
           # hyprland-spiral will be built before hyprland-plugin-spiral
           build-pacman-repo build
 
+          # Fix: VCS packages have dynamic versions from pkgver()
+          # build-pacman-repo uses .SRCINFO's static pkgver to find files
+          # Manually copy any built packages it missed
+          echo "Collecting VCS packages with dynamic versions..."
+          find "${CONTAINER_DIR}" -name "*.pkg.tar.zst" -type f -newer build-pacman-repo.yaml \
+            -exec cp -v {} repo/ \;
+
           # ensure files are present in the repo
           repo_files=$(ls repo)
           if [[ -z "${repo_files}" ]]; then
