@@ -21,7 +21,7 @@ depends=(cairo # libcairo.so
   glslang
   hyprcursor libhyprcursor.so
   hyprgraphics libhyprgraphics.so
-  hyprland-qtutils
+  hyprland-guiutils
   hyprlang libhyprlang.so
   hyprutils libhyprutils.so
   hyprwayland-scanner
