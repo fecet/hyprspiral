@@ -98,30 +98,10 @@ jobs:
 
           # Phase 1: Build and install hyprland-spiral first
           echo "=== Phase 1: Building hyprland-spiral manually ==="
-          cd "${CONTAINER_DIR}/hyprland-spiral"
-
-          # Build as root (makepkg was patched to allow this)
-          MAKEFLAGS="-j$(nproc)" makepkg -s --noconfirm
-
-          # Find the built package (VCS version with dynamic name)
-          hyprland_pkg=$(ls hyprland-spiral-*.pkg.tar.zst 2>/dev/null | head -1)
-          if [[ -z "$hyprland_pkg" ]]; then
-            echo "::error:: hyprland-spiral package not found after build"
-            exit 1
-          fi
-
-          echo "Built hyprland-spiral: $hyprland_pkg"
-
-          # Install to system
-          pacman -U --noconfirm "$hyprland_pkg"
-
-          # Verify installation
-          echo "=== Verifying hyprland-spiral installation ==="
-          pacman -Q hyprland-spiral
-          pkg-config --modversion hyprland || echo "pkg-config failed"
-          ls -la /usr/include/hyprland/ 2>/dev/null | head -5 || echo "headers not found"
-
-          cd -
+          
+          # Use the local build script to build and install hyprland-spiral
+          # This ensures consistency with local development and handles dependencies
+          ./local_build.sh --install --keep-temp hyprland-spiral
 
           # Phase 2: Build all packages with build-pacman-repo
           echo "=== Phase 2: Building all packages ==="

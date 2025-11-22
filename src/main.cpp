@@ -19,9 +19,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     const std::string HASH = __hyprland_api_get_hash();
 
     if (HASH != __hyprland_api_get_client_hash()) {
-        HyprlandAPI::addNotification(PHANDLE, "[hyprscroller] Failure in initialization: Version mismatch (headers ver is not equal to running hyprland ver)",
-                                     CHyprColor{1.0, 0.2, 0.2, 1.0}, 5000);
-        throw std::runtime_error("[hyprscroller] Version mismatch");
+        std::string mismatchMsg = "[hyprscroller] Version mismatch: headers ver [" + std::string(__hyprland_api_get_client_hash()) + "] vs running hyprland ver [" + HASH + "]";
+        HyprlandAPI::addNotification(PHANDLE, mismatchMsg, CHyprColor{1.0, 0.2, 0.2, 1.0}, 15000);
+        throw std::runtime_error(mismatchMsg);
     }
 
     g_ScrollerLayout = std::make_unique<ScrollerLayout>();

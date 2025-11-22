@@ -9,8 +9,8 @@ _srcname="xdg-desktop-portal-hyprland"
 url="https://github.com/3l0w/$_srcname"
 arch=(x86_64)
 license=(MIT)
-provides=(xdg-desktop-portal-impl xdg-desktop-portal-hyprland)
-conflicts=(xdg-desktop-portal-hyprland)
+provides=(xdg-desktop-portal-impl xdg-desktop-portal-hyprland hyprland-protocols)
+conflicts=(xdg-desktop-portal-hyprland hyprland-protocols)
 depends=(gcc-libs
          glibc
          hyprlang libhyprlang.so
@@ -22,7 +22,7 @@ depends=(gcc-libs
          qt6-wayland
          sdbus-cpp libsdbus-c++.so
          util-linux-libs libuuid.so
-         xdg-desktop-portal hyprland-spiral)
+         xdg-desktop-portal)
 makedepends=(cmake
              hyprland-protocols
              wayland

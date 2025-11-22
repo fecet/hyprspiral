@@ -26,12 +26,13 @@ pkgbase = xdg-desktop-portal-hyprland-input-capture
 	depends = util-linux-libs
 	depends = libuuid.so
 	depends = xdg-desktop-portal
-	depends = hyprland-spiral
 	optdepends = grim: required for the screenshot portal to function
 	optdepends = slurp: support for interactive mode for the screenshot portal
 	provides = xdg-desktop-portal-impl
 	provides = xdg-desktop-portal-hyprland
+	provides = hyprland-protocols
 	conflicts = xdg-desktop-portal-hyprland
+	conflicts = hyprland-protocols
 	source = git+https://github.com/3l0w/xdg-desktop-portal-hyprland#branch=feat/input-capture-impl
 	sha256sums = SKIP
 
