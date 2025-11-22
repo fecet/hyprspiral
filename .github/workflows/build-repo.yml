@@ -159,9 +159,10 @@ jobs:
         id: release_info
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            # Daily/nightly build - use unique tag per build
-            echo "tag=nightly-${{ github.run_number }}" >> $GITHUB_OUTPUT
-            echo "name=Nightly Build - $(date +'%Y-%m-%d') (#${{ github.run_number }})" >> $GITHUB_OUTPUT
+            # Daily/nightly build - use unique tag per day
+            # This allows multiple builds on the same day to update the same release
+            echo "tag=nightly-$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+            echo "name=Nightly Build - $(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
             echo "prerelease=false" >> $GITHUB_OUTPUT
             echo "make_latest=true" >> $GITHUB_OUTPUT
           else
@@ -175,7 +176,7 @@ jobs:
       - name: Create/Update GitHub Release
         uses: ncipollo/release-action@v1.20.0
         with:
-          allowUpdates: false
+          allowUpdates: true
           artifactErrorsFailBuild: true
           artifacts: repo/*
           generateReleaseNotes: true
