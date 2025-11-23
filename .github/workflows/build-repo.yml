@@ -139,18 +139,18 @@ jobs:
         id: release_info
         run: |
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            # Daily/nightly build - use unique tag per day
-            # This allows multiple builds on the same day to update the same release
-            echo "tag=nightly-$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
-            echo "name=Nightly Build - $(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+            # Daily/nightly build - use fixed "nightly" tag
+            # This allows all nightly builds to update the same release
+            echo "tag=nightly" >> $GITHUB_OUTPUT
+            echo "name=Nightly Build" >> $GITHUB_OUTPUT
             echo "prerelease=false" >> $GITHUB_OUTPUT
-            echo "make_latest=true" >> $GITHUB_OUTPUT
+            echo "make_latest=false" >> $GITHUB_OUTPUT
           else
             # Tagged release
             echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
             echo "name=Release ${{ github.ref_name }}" >> $GITHUB_OUTPUT
             echo "prerelease=false" >> $GITHUB_OUTPUT
-            echo "make_latest=true" >> $GITHUB_OUTPUT
+            echo "make_latest=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Create/Update GitHub Release
@@ -164,4 +164,5 @@ jobs:
           name: ${{ steps.release_info.outputs.name }}
           prerelease: ${{ steps.release_info.outputs.prerelease }}
           tag: ${{ steps.release_info.outputs.tag }}
+          removeArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
