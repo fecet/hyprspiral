@@ -87,10 +87,6 @@ public:
 
     void post_event(WORKSPACEID workspace, const std::string &event);
 
-    void swipe_begin(IPointer::SSwipeBeginEvent);
-    void swipe_update(SCallbackInfo& info, IPointer::SSwipeUpdateEvent);
-    void swipe_end(SCallbackInfo& info, IPointer::SSwipeEndEvent);
-
     void mouse_move(SCallbackInfo& info, const Vector2D &mousePos);
 
     bool is_enabled() const { return enabled; }
@@ -104,8 +100,6 @@ private:
 
     bool enabled;
     Vector2D gesture_delta;
-    bool swipe_active;
-    Direction swipe_direction;
     bool jumping = false;
 };
 

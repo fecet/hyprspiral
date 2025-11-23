@@ -681,9 +681,6 @@ void ScrollerLayout::replaceWindowDataWith(PHLWINDOW /* from */, PHLWINDOW /* to
 static SP<HOOK_CALLBACK_FN> workspaceHookCallback;
 static SP<HOOK_CALLBACK_FN> focusedMonHookCallback;
 static SP<HOOK_CALLBACK_FN> activeWindowHookCallback;
-static SP<HOOK_CALLBACK_FN> swipeBeginHookCallback;
-static SP<HOOK_CALLBACK_FN> swipeUpdateHookCallback;
-static SP<HOOK_CALLBACK_FN> swipeEndHookCallback;
 static SP<HOOK_CALLBACK_FN> mouseMoveHookCallback;
 
 void ScrollerLayout::onEnable() {
@@ -708,21 +705,6 @@ void ScrollerLayout::onEnable() {
         auto window = std::any_cast<PHLWINDOW>(param);
         trails->post_trailmark_event(window);
         marks.post_mark_event(window);
-    });
-
-    swipeBeginHookCallback = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeBegin", [&](void* /* self */, SCallbackInfo& /* info */, std::any param) {
-        auto swipe_event = std::any_cast<IPointer::SSwipeBeginEvent>(param);
-        swipe_begin(swipe_event);
-    });
-
-    swipeUpdateHookCallback = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeUpdate", [&](void* /* self */, SCallbackInfo& info, std::any param) {
-        auto swipe_event = std::any_cast<IPointer::SSwipeUpdateEvent>(param);
-        swipe_update(info, swipe_event);
-    });
-
-    swipeEndHookCallback = HyprlandAPI::registerCallbackDynamic(PHANDLE, "swipeEnd", [&](void* /* self */, SCallbackInfo& info, std::any param) {
-        auto swipe_event = std::any_cast<IPointer::SSwipeEndEvent>(param);
-        swipe_end(info, swipe_event);
     });
 
     mouseMoveHookCallback = HyprlandAPI::registerCallbackDynamic(PHANDLE, "mouseMove", [&](void* /* self */, SCallbackInfo& info, std::any param) {
@@ -762,18 +744,6 @@ void ScrollerLayout::onDisable() {
     if (activeWindowHookCallback != nullptr) {
         activeWindowHookCallback.reset();
         activeWindowHookCallback = nullptr;
-    }
-    if (swipeBeginHookCallback != nullptr) {
-        swipeBeginHookCallback.reset();
-        swipeBeginHookCallback = nullptr;
-    }
-    if (swipeUpdateHookCallback != nullptr) {
-        swipeUpdateHookCallback.reset();
-        swipeUpdateHookCallback = nullptr;
-    }
-    if (swipeEndHookCallback != nullptr) {
-        swipeEndHookCallback.reset();
-        swipeEndHookCallback = nullptr;
     }
     if (mouseMoveHookCallback != nullptr) {
         mouseMoveHookCallback.reset();
@@ -1559,146 +1529,6 @@ void ScrollerLayout::post_event(WORKSPACEID workspace, const std::string &event)
     }
 
     s->post_event(event);
-}
-
-void ScrollerLayout::swipe_begin(IPointer::SSwipeBeginEvent /* swipe_event */) {
-    WORKSPACEID wid = get_workspace_id();
-    if (wid == -1) {
-        return;
-    }
-
-    swipe_active = false;
-    swipe_direction = Direction::Begin;
-}
-
-void ScrollerLayout::swipe_update(SCallbackInfo &info, IPointer::SSwipeUpdateEvent swipe_event) {
-    WORKSPACEID wid = get_workspace_id();
-    if (wid == -1) {
-        return;
-    }
-
-    auto s = getRowForWorkspace(wid);
-
-    static auto *const *HS = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "gestures:workspace_swipe")->getDataStaticPtr();
-    static auto *const *HSFINGERS = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "gestures:workspace_swipe_fingers")->getDataStaticPtr();
-    static auto *const *HSFINGERSMIN = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "gestures:workspace_swipe_min_fingers")->getDataStaticPtr();
-    static auto *const *NATURAL = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "input:touchpad:natural_scroll")->getDataStaticPtr();
-    static auto *const *HSINVERT = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "gestures:workspace_swipe_invert")->getDataStaticPtr();
-    static auto *const *GSENS = (Hyprlang::FLOAT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_sensitivity")->getDataStaticPtr();
-    static auto *const *SENABLE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_scroll_enable")->getDataStaticPtr();
-    static auto *const *SFINGERS = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_scroll_fingers")->getDataStaticPtr();
-    static auto *const *OENABLE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_overview_enable")->getDataStaticPtr();
-    static auto *const *OFINGERS = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_overview_fingers")->getDataStaticPtr();
-    static auto *const *ODISTANCE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_overview_distance")->getDataStaticPtr();
-    static auto *const *WENABLE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_workspace_switch_enable")->getDataStaticPtr();
-    static auto *const *WFINGERS = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_workspace_switch_fingers")->getDataStaticPtr();
-    static auto *const *WDISTANCE = (Hyprlang::INT *const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_workspace_switch_distance")->getDataStaticPtr();
-    static auto const *WPREFIX = (Hyprlang::STRING const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:gesture_workspace_switch_prefix")->getDataStaticPtr();
-
-    if (**HS &&
-        (**HSFINGERS == swipe_event.fingers ||
-         (**HSFINGERSMIN && swipe_event.fingers >= **HSFINGERS))) {
-        info.cancelled = true; 
-        return;
-    }
-
-    if (!(**SENABLE && swipe_event.fingers == **SFINGERS) &&
-        !(**OENABLE && swipe_event.fingers == **OFINGERS) &&
-        !(**WENABLE && swipe_event.fingers == **WFINGERS)) {
-        return;
-    }
-
-    info.cancelled = true;
-    Vector2D delta = swipe_event.delta;
-    delta *= **NATURAL ? **GSENS : -**GSENS;
-    if (!swipe_active) {
-        gesture_delta = Vector2D(0.0, 0.0);
-    }
-    gesture_delta += delta;
-
-    if (**SENABLE && swipe_event.fingers == **SFINGERS) {
-        if (s == nullptr)
-            return;
-        if (std::abs(gesture_delta.x) > std::abs(gesture_delta.y))
-            swipe_direction = gesture_delta.x > 0 ? Direction::Right : Direction::Left;
-        else
-            swipe_direction = gesture_delta.y > 0 ? Direction::Down : Direction::Up;
-        s->scroll_update(swipe_direction, delta);
-    } else {
-        // Undo natural
-        const Vector2D delta = gesture_delta * (**NATURAL ? -1.0 : 1.0);
-        if (**OENABLE && swipe_event.fingers == **OFINGERS) {
-            // Only accept the first update: one swipe, one trigger.
-            if (swipe_active)
-                return;
-            if (delta.y <= -**ODISTANCE) {
-                if (s == nullptr)
-                    return;
-                if (!s->is_overview()) {
-                    s->toggle_overview();
-                }
-            } else if (delta.y >= **ODISTANCE) {
-                if (s == nullptr)
-                    return;
-                if (s->is_overview()) {
-                    s->toggle_overview();
-                }
-            }
-        }
-        if (**WENABLE && swipe_event.fingers == **WFINGERS) {
-            // Only accept the first update: one swipe, one trigger.
-            if (swipe_active)
-                return;
-            if (delta.x <= -**WDISTANCE) {
-                std::string offset(*WPREFIX);
-                g_pKeybindManager->m_dispatchers["workspace"](**HSINVERT ? offset + "+1" : offset + "-1");
-            } else if (delta.x >= **WDISTANCE) {
-                std::string offset(*WPREFIX);
-                g_pKeybindManager->m_dispatchers["workspace"](**HSINVERT ? offset + "-1" : offset + "+1");
-            }
-        }
-    }
-    swipe_active = true;
-}
-
-void ScrollerLayout::swipe_end(SCallbackInfo &info,
-                               IPointer::SSwipeEndEvent /* swipe_event */) {
-    WORKSPACEID wid = get_workspace_id();
-    if (wid == -1) {
-        return;
-    }
-    // Only if scrolling
-    if (swipe_direction != Direction::Begin) {
-        auto s = getRowForWorkspace(wid);
-        if (s) {
-            auto from = s->get_active_window();
-            s->scroll_end(swipe_direction);
-            auto to = s->get_active_window();
-
-            if (from == to) {
-                // scroll hit an edge and couldn't move
-                static auto* const *movefocus_changes_workspace = (Hyprlang::INT* const *)HyprlandAPI::getConfigValue(PHANDLE, "plugin:scroller:movefocus_changes_workspace")->getDataStaticPtr();
-                if (**movefocus_changes_workspace) {
-                    if (swipe_direction == Direction::Up) { // Swipe down gesture
-                        PHLMONITOR monitor = g_pCompositor->getMonitorInDirection('d');
-                        if (monitor == nullptr) {
-                            g_pKeybindManager->m_dispatchers["workspace"]("m+1");
-                        }
-                    } else if (swipe_direction == Direction::Down) { // Swipe up gesture
-                        PHLMONITOR monitor = g_pCompositor->getMonitorInDirection('u');
-                        if (monitor == nullptr) {
-                            g_pKeybindManager->m_dispatchers["workspace"]("m-1");
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    swipe_active = false;
-    gesture_delta = Vector2D(0.0, 0.0);
-    swipe_direction = Direction::Begin;
-    info.cancelled = true;
 }
 
 void ScrollerLayout::mouse_move(SCallbackInfo& info, const Vector2D &mousePos) {
