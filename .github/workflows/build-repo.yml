@@ -101,16 +101,13 @@ jobs:
           # Install hyprland-spiral build dependencies first (except hyprland-protocols)
           # We need to install deps because local_build.sh uses -d flag
           echo "Installing hyprland-spiral build dependencies..."
-          cd "${CONTAINER_DIR}/hyprland-spiral"
           
           # Get makedepends from PKGBUILD and install them (except hyprland-protocols)
-          makedeps=$(source PKGBUILD && echo "${makedepends[@]}" | tr ' ' '\n' | grep -v '^hyprland-protocols$' || true)
+          makedeps=$(cd "${CONTAINER_DIR}/hyprland-spiral" && source PKGBUILD && echo "${makedepends[@]}" | tr ' ' '\n' | grep -v '^hyprland-protocols$' || true)
           if [[ -n "$makedeps" ]]; then
             echo "Installing: $makedeps"
             pacman -S --needed --noconfirm $makedeps
           fi
-          
-          cd ../..
           
           # Now build and install hyprland-spiral using local script
           # This ensures consistency with local development
