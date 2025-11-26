@@ -39,19 +39,11 @@ jobs:
             pixman \
             libdrm \
             cairo \
-            pango \
-            wget
+            pango
           pacman -Scc --noconfirm
 
-      - name: Download Pacman Repo Builder
-        run: |
-          wget \
-            "https://github.com/LizardByte/pacman-repo-builder/releases/latest/download/build-pacman-repo" \
-            -O /usr/bin/build-pacman-repo
-          chmod +x /usr/bin/build-pacman-repo
-
-          # patch makepkg to allow running as root
-          build-pacman-repo patch-makepkg --replace
+          # Patch makepkg to allow running as root
+          sed -i 's/exit $E_ROOT/echo "Running as root..."/' /usr/bin/makepkg
 
       - name: Checkout
         uses: actions/checkout@v5
@@ -68,81 +60,29 @@ jobs:
           # shellcheck disable=SC2016  # we don't want to expand the expression here
           sed -i 's,#MAKEFLAGS="-j2",MAKEFLAGS="-j$(nproc)",g' /etc/makepkg.conf
 
-      - name: Build Pacman Repo
+      - name: Build Packages
+        shell: bash
         run: |
-          # generate build-pacman-repo.yaml
-          build-pacman-repo print-config \
-            --repository repo/hyprspiral.db.tar.gz \
-            --container "${CONTAINER_DIR}" \
-            --require-pkgbuild \
-            --require-srcinfo \
-            --with-record-failed-builds repo/failed-build-records.yaml \
-            --with-install-missing-dependencies true \
-            --with-clean-before-build true \
-            --with-clean-after-build true \
-            --with-force-rebuild true \
-            --with-pacman pacman \
-            --with-arch-filter x86_64 \
-            --with-check inherit \
-            --with-packager "hyprspiral builder <builder@hyprspiral.local>" \
-            --with-allow-failure false \
-            --with-dereference-database-symlinks true \
-            > build-pacman-repo.yaml
+          # Build all packages using the unified build script
+          # This handles two-phase build: hyprland-spiral first, then others
+          ./build.sh --install
 
-          # validate .SRCINFO files
-          build-pacman-repo sync-srcinfo || \
-            echo "::warning:: .SRCINFO files mismatch" >> "${GITHUB_STEP_SUMMARY}" && \
-            build-pacman-repo sync-srcinfo -u
+          # Collect built packages to repo/
+          echo "=== Collecting packages ==="
+          find "${CONTAINER_DIR}" -name "*.pkg.tar.zst" -type f -exec cp -v {} repo/ \;
 
-          # Two-phase build to ensure hyprland-spiral is installed before building plugin
+          # Create repository database
+          echo "=== Creating repository database ==="
+          repo-add repo/hyprspiral.db.tar.gz repo/*.pkg.tar.zst
 
-          # Phase 1: Build and install hyprland-spiral ===
-          
-          # Install hyprland-spiral build dependencies first (except hyprland-protocols)
-          # We need to install deps because local_build.sh uses -d flag
-          echo "Installing hyprland-spiral build dependencies..."
-          
-          # Get makedepends from PKGBUILD and install them (except hyprland-protocols)
-          makedeps=$(cd "${CONTAINER_DIR}/hyprland-spiral" && source PKGBUILD && echo "${makedepends[@]}" | tr ' ' '\n' | grep -v '^hyprland-protocols$' || true)
-          if [[ -n "$makedeps" ]]; then
-            echo "Installing: $makedeps"
-            pacman -S --needed --noconfirm $makedeps
-          fi
-          
-          # Now build and install hyprland-spiral using local script
-          # This ensures consistency with local development
-          ./local_build.sh --install --keep-temp hyprland-spiral
-
-          # Phase 2: Build all packages ===
-          # hyprland-spiral will be skipped as it's already built
-          build-pacman-repo build
-
-          # Fix: VCS packages have dynamic versions from pkgver()
-          # Collect all VCS packages and add them to the repository database
-          echo "=== Collecting VCS packages with dynamic versions ==="
-          vcs_packages=$(find "${CONTAINER_DIR}" -name "*.pkg.tar.zst" -type f -newer build-pacman-repo.yaml)
-
-          if [[ -n "$vcs_packages" ]]; then
-            echo "Found VCS packages to add:"
-            echo "$vcs_packages"
-
-            # Copy packages to repo directory
-            echo "$vcs_packages" | xargs -I {} cp -v {} repo/
-
-            # Add VCS packages to the repository database
-            echo "Adding VCS packages to repository database..."
-            echo "$vcs_packages" | xargs -I {} basename {} | \
-              xargs -I {} repo-add repo/hyprspiral.db.tar.gz "repo/{}"
-          else
-            echo "No VCS packages found to add"
-          fi
-
-          # ensure files are present in the repo
-          repo_files=$(ls repo)
-          if [[ -z "${repo_files}" ]]; then
-            echo "::error:: No files found in repo"
+          # Verify packages exist
+          if [[ -z "$(ls repo/*.pkg.tar.zst 2>/dev/null)" ]]; then
+            echo "::error:: No packages built"
             exit 1
           fi
+
+          echo "=== Built packages ==="
+          ls -la repo/
 
       - name: Prepare Release Info
         id: release_info
