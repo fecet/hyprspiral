@@ -96,15 +96,27 @@ jobs:
 
           # Two-phase build to ensure hyprland-spiral is installed before building plugin
 
-          # Phase 1: Build and install hyprland-spiral first
-          echo "=== Phase 1: Building hyprland-spiral manually ==="
+          # Phase 1: Build and install hyprland-spiral ===
           
-          # Use the local build script to build and install hyprland-spiral
-          # This ensures consistency with local development and handles dependencies
+          # Install hyprland-spiral build dependencies first (except hyprland-protocols)
+          # We need to install deps because local_build.sh uses -d flag
+          echo "Installing hyprland-spiral build dependencies..."
+          cd "${CONTAINER_DIR}/hyprland-spiral"
+          
+          # Get makedepends from PKGBUILD and install them (except hyprland-protocols)
+          makedeps=$(source PKGBUILD && echo "${makedepends[@]}" | tr ' ' '\n' | grep -v '^hyprland-protocols$' || true)
+          if [[ -n "$makedeps" ]]; then
+            echo "Installing: $makedeps"
+            pacman -S --needed --noconfirm $makedeps
+          fi
+          
+          cd ../..
+          
+          # Now build and install hyprland-spiral using local script
+          # This ensures consistency with local development
           ./local_build.sh --install --keep-temp hyprland-spiral
 
-          # Phase 2: Build all packages with build-pacman-repo
-          echo "=== Phase 2: Building all packages ==="
+          # Phase 2: Build all packages ===
           # hyprland-spiral will be skipped as it's already built
           build-pacman-repo build
 
